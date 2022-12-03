@@ -2,7 +2,8 @@ import argparse
 import time
 
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver import FirefoxOptions
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.select import Select
@@ -33,10 +34,12 @@ NATIONALITY = args.nacionalidad
 NAME = args.nombre
 PHONE = args.telefono
 MAIL = args.mail
-POLICE_APPOINTMENTS = {'POLICIA', 'POLICÍA', 'CERTIFICADO', 'AUTORIZACIÓN', 'ASILO'}
+POLICE_APPOINTMENTS = {'POLICIA', 'POLICÍA', 'CERTIFICADO', 'AUTORIZACIÓN', 'ASILO', 'ASIGNACIÓN'}
 
-driver = webdriver.Firefox()
-appointment_available = False
+
+options = FirefoxOptions()
+options.add_argument('--headless')
+driver = webdriver.Firefox(options=options)
 
 
 def get_appointment_type_id(appointment_type):
@@ -59,9 +62,12 @@ def get_city_text(city_options):
     return ''
 
 
-while True:
+appointment_available = False
+
+
+while not appointment_available:
     try:
-        driver.get("https://sede.administracionespublicas.gob.es/icpplus/index.html")
+        driver.get("https://icp.administracionelectronica.gob.es/icpplus/index.html")
 
         # Waiting for login page to be fully loaded
         WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.ID, 'form')))
@@ -74,11 +80,13 @@ while True:
 
         # Select procedure
         appointment_id = get_appointment_type_id(APPOINTMENT_TYPE)
+        print(appointment_id)
         WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.ID, appointment_id)))
         driver.execute_script('window.scrollTo(0, document.body.scrollHeight / 2);')
         procedure_selector = Select(driver.find_element(By.ID, appointment_id))
         try:
-            procedure_selector.select_by_visible_text(APPOINTMENT_TYPE)
+            #procedure_selector.select_by_visible_text(APPOINTMENT_TYPE)
+            procedure_selector.select_by_value('4031')
         except NoSuchElementException:
             print('El trámite seleccionado no fue bien escrito. Revise por mayúsculas, minisculas o acentos que puedan estar mal escritor')
             print('El texto introducido debe ser exactamente igual a como esta escrito en la web. Escriba nuevamente el trámite que desea realizar y presione ENTER')
@@ -125,7 +133,8 @@ while True:
         try:
             driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
             nationality_selector = Select(driver.find_element(By.ID, 'txtPaisNac'))
-            nationality_selector.select_by_visible_text(NATIONALITY)
+            #nationality_selector.select_by_visible_text(NATIONALITY)
+            nationality_selector.select_by_value('117')
         except NoSuchElementException:
             pass
 
@@ -173,17 +182,20 @@ while True:
 
             WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.ID, 'cita_1')))
             print_choosing_appointment_message()
-            wait_till_dead = input()
+            appointment_available = True
 
-        except NoSuchElementException:
-            # In case there're no appointments available we'll sleep this for 10 seconds
-            WebDriverWait(driver, 10)
+        except (TimeoutException, NoSuchElementException):
+            # In case there're no appointments available we'll sleep this for 5 minutes
+            print('No appointments available\n')
+            time.sleep(300)
             driver.close()
             driver.quit()
-            driver = webdriver.Firefox()
+            driver = webdriver.Firefox(options=options)
 
     except Exception as ex:
-        print(ex.__str__())
+        print(ex)
+        # 5 minutes sleep
+        time.sleep(300)
         driver.close()
         driver.quit()
-        driver = webdriver.Firefox()
+        driver = webdriver.Firefox(options=options)
